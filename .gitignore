@@ -1,0 +1,43 @@
+# Build output
+target/
+build/
+*.class
+
+# IDE files
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.classpath
+.project
+.settings/
+
+# macOS
+.DS_Store
+._*
+
+# Logs and local runtime data
+*.log
+logs/
+/data/
+/uploads/
+/cache/
+
+# Local secrets and configuration
+.env
+.env.*
+!.env.example
+application-local.properties
+application-local.yml
+application-local.yaml
+application-secret.properties
+application-secret.yml
+application-secret.yaml
+*.jks
+*.p12
+*.pfx
+*.key
+
+# Local documentation (project policy)
+*.md
