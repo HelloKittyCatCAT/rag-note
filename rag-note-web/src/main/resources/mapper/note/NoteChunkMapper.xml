@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sya.ragnote.mapper.note.NoteChunkMapper">
+ <resultMap id="evidence" type="com.sya.ragnote.dto.note.NoteEvidence"><constructor>
+ <arg column="note_id" javaType="java.util.UUID" typeHandler="com.sya.ragnote.mybatis.UuidTypeHandler"/>
+ <arg column="chunk_id" javaType="java.util.UUID" typeHandler="com.sya.ragnote.mybatis.UuidTypeHandler"/>
+ <arg column="title" javaType="java.lang.String"/><arg column="heading_path" javaType="java.lang.String"/>
+ <arg column="start_line" javaType="_int"/><arg column="end_line" javaType="_int"/>
+ <arg column="content" javaType="java.lang.String"/><arg column="score" javaType="_double"/>
+ </constructor></resultMap>
+ <select id="search" resultMap="evidence">
+ SELECT c.note_id,c.id AS chunk_id,n.title,c.heading_path,c.start_line,c.end_line,c.content,1-(c.embedding &lt;=&gt; CAST(#{queryVector} AS vector)) AS score
+ FROM note_chunk c JOIN note n ON n.id=c.note_id AND n.owner_id=c.owner_id
+ WHERE c.owner_id=#{ownerId} AND n.owner_id=#{ownerId} AND n.status='READY' AND c.embedding_model=#{embeddingModel}
+ <if test="noteIds != null">AND n.id IN <foreach collection="noteIds" item="id" open="(" close=")" separator=",">#{id}</foreach></if>
+ AND 1-(c.embedding &lt;=&gt; CAST(#{queryVector} AS vector)) &gt;= #{minScore}
+ ORDER BY c.embedding &lt;=&gt; CAST(#{queryVector} AS vector),c.id LIMIT #{limit}
+ </select>
+ <select id="findOwnedChunkIds" resultType="java.util.UUID">SELECT c.id FROM note_chunk c JOIN note n ON n.id=c.note_id AND n.owner_id=c.owner_id WHERE c.owner_id=#{ownerId} AND n.owner_id=#{ownerId} AND n.status='READY' AND c.id IN <foreach collection="ids" item="id" open="(" close=")" separator=",">#{id}</foreach></select>
+ <select id="hasIncompatibleModel" resultType="boolean">SELECT EXISTS(SELECT 1 FROM note_chunk c JOIN note n ON n.id=c.note_id AND n.owner_id=c.owner_id WHERE c.owner_id=#{ownerId} AND n.owner_id=#{ownerId} AND n.status='READY' AND c.embedding_model != #{embeddingModel}
+ <if test="noteIds != null">AND n.id IN <foreach collection="noteIds" item="id" open="(" close=")" separator=",">#{id}</foreach></if>)</select>
+ <insert id="insertAll">INSERT INTO note_chunk(id,note_id,owner_id,chunk_index,heading_path,start_line,end_line,content,token_count,embedding_model,embedding) VALUES <foreach collection="chunks" item="c" separator=",">(#{c.id},#{c.noteId},#{c.ownerId},#{c.chunkIndex},#{c.headingPath},#{c.startLine},#{c.endLine},#{c.content},#{c.tokenCount},#{c.embeddingModel},CAST(#{c.embedding} AS vector))</foreach></insert>
+</mapper>

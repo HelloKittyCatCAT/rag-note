@@ -1,0 +1,65 @@
+spring:
+  application:
+    name: rag-note
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/rag_note}
+    username: ${DATABASE_USERNAME:rag_note}
+    password: ${DATABASE_PASSWORD}
+    hikari:
+      maximum-pool-size: 10
+      connection-timeout: 5000
+  flyway:
+    enabled: true
+  session:
+    timeout: 30m
+    jdbc:
+      initialize-schema: never
+  servlet:
+    multipart:
+      max-file-size: 2MB
+      max-request-size: 3MB
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+  servlet:
+    session:
+      cookie:
+        name: SESSION
+        http-only: true
+        same-site: lax
+        secure: ${SESSION_COOKIE_SECURE:false}
+  tomcat:
+    max-swallow-size: 3MB
+mybatis:
+  mapper-locations: classpath*:mapper/**/*.xml
+  type-handlers-package: com.sya.ragnote.mybatis
+  configuration:
+    map-underscore-to-camel-case: true
+    default-statement-timeout: 10
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+rag:
+  bootstrap:
+    username: ${BOOTSTRAP_USERNAME:}
+    password: ${BOOTSTRAP_PASSWORD:}
+  models:
+    chat:
+      base-url: ${CHAT_BASE_URL:https://api.openai.com/v1}
+      api-key: ${CHAT_API_KEY:}
+      model: ${CHAT_MODEL:}
+      timeout-seconds: 60
+    embedding:
+      base-url: ${EMBEDDING_BASE_URL:https://api.openai.com/v1}
+      api-key: ${EMBEDDING_API_KEY:}
+      model: ${EMBEDDING_MODEL:}
+      dimensions: 1024
+      timeout-seconds: 60

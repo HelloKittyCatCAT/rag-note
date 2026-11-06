@@ -1,0 +1,4754 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "RAG 笔记 MVP HTTP 接口契约",
+    "version": "1.0.0",
+    "description": "MVP 业务接口已实现，运行前须配置 PostgreSQL/pgvector 和模型连接。MVP 为通用私人笔记 RAG，非股票专用。API 模块 Param/Vo 为 Java 共享数据契约，本文件定义 HTTP 行为。所有 JSON 请求拒绝未定义字段；所有写请求均要求 Session 绑定 CSRF。身份只从已验证登录主体取值。所有响应 application/json，code=0 成功，错误 data=null。错误使用真实 HTTP 状态，不用 200 包装失败。响应时间 UTC ISO-8601，私人数据 Cache-Control:no-store；X-Request-Id 由服务器生成。对受保护接口先检查认证，已登录后检查 CSRF/角色/业务；无有效 Session 返回 401，禁用账号 403；匿名登录/注册仅要求匿名 Session + CSRF。相同请求多项错误时按此先后顺序处理。实现包含运行时 Controller、数据库持久化与模型适配；数据库及真实模型联调未在本次执行。"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080",
+      "description": "本地启动地址；需先配置数据库和模型，本次未做外部服务联调。"
+    }
+  ],
+  "tags": [
+    {
+      "name": "认证"
+    },
+    {
+      "name": "账号管理"
+    },
+    {
+      "name": "私人笔记"
+    },
+    {
+      "name": "笔记问答"
+    }
+  ],
+  "paths": {
+    "/api/auth/csrf": {
+      "get": {
+        "tags": [
+          "认证"
+        ],
+        "operationId": "getCsrfToken",
+        "summary": "获取 CSRF 令牌",
+        "description": "匿名或已登录均可调用。创建或复用 Session，返回令牌与请求头名；写操作均携带同一 Cookie 和令牌。登录成功、登出后重新获取，不复用旧令牌。",
+        "x-permission": "PUBLIC",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "操作成功；见业务结果语义。",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              },
+              "Set-Cookie": {
+                "description": "创建匿名 Session 时返回；Cookie 名 SESSION，HttpOnly，SameSite=Lax，Path=/；生产 HTTPS 下 Secure。",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CsrfResult"
+                },
+                "examples": {
+                  "token": {
+                    "value": {
+                      "code": 0,
+                      "msg": "成功",
+                      "data": {
+                        "token": "example-csrf-token",
+                        "headerName": "X-XSRF-TOKEN"
+                      },
+                      "requestId": "example-request"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "90002 服务内部错误",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "90002": {
+                    "value": {
+                      "code": 90002,
+                      "msg": "服务内部错误",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              90002
+            ]
+          }
+        }
+      }
+    },
+    "/api/auth/register": {
+      "post": {
+        "tags": [
+          "认证"
+        ],
+        "operationId": "registerUser",
+        "summary": "邀请码注册普通用户",
+        "description": "用户名转小写，唯一性与邀请码状态统一返回 10004。邀请码与创建 USER 在同一事务消耗；并发仅一个成功，失败不消耗。客户端不能指定 role/enabled/id。注册不自动登录；成功仍为匿名身份。",
+        "x-permission": "PUBLIC",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "操作成功；见业务结果语义。",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResult"
+                },
+                "examples": {
+                  "registered": {
+                    "value": {
+                      "code": 0,
+                      "msg": "成功",
+                      "data": {
+                        "id": "2",
+                        "username": "note_user",
+                        "role": "USER",
+                        "enabled": true
+                      },
+                      "requestId": "example-request"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "10004 注册失败，请检查用户名和邀请码；90001 请求参数错误",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "10004": {
+                    "value": {
+                      "code": 10004,
+                      "msg": "注册失败，请检查用户名和邀请码",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  },
+                  "90001": {
+                    "value": {
+                      "code": 90001,
+                      "msg": "请求参数错误",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              10004,
+              90001
+            ]
+          },
+          "403": {
+            "description": "90003 CSRF校验失败",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "90003": {
+                    "value": {
+                      "code": 90003,
+                      "msg": "CSRF校验失败",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              90003
+            ]
+          },
+          "500": {
+            "description": "90002 服务内部错误",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "90002": {
+                    "value": {
+                      "code": 90002,
+                      "msg": "服务内部错误",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              90002
+            ]
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterParam"
+              },
+              "example": {
+                "username": "note_user",
+                "password": "example-password-123",
+                "inviteToken": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "认证"
+        ],
+        "operationId": "loginUser",
+        "summary": "登录并保存服务器会话",
+        "description": "校验凭据后再检查 enabled：凭据错误统一 10003，正确但禁用为 10002。成功轮换 Session ID，显式保存认证上下文；空闲 30 分钟过期。登录后再次 GET csrf。重复登录成功替换当前会话认证；不返回 JWT。",
+        "x-permission": "PUBLIC",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "操作成功；见业务结果语义。",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              },
+              "Set-Cookie": {
+                "description": "轮换后的 SESSION Cookie；HttpOnly、SameSite=Lax、Path=/；生产 HTTPS 下 Secure。",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResult"
+                },
+                "examples": {
+                  "loggedIn": {
+                    "value": {
+                      "code": 0,
+                      "msg": "成功",
+                      "data": {
+                        "id": "1",
+                        "username": "note_admin",
+                        "role": "ADMIN",
+                        "enabled": true
+                      },
+                      "requestId": "example-request"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "90001 请求参数错误",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "90001": {
+                    "value": {
+                      "code": 90001,
+                      "msg": "请求参数错误",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              90001
+            ]
+          },
+          "401": {
+            "description": "10003 用户名或密码错误",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "10003": {
+                    "value": {
+                      "code": 10003,
+                      "msg": "用户名或密码错误",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              10003
+            ]
+          },
+          "403": {
+            "description": "10002 账号已禁用；90003 CSRF校验失败",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "10002": {
+                    "value": {
+                      "code": 10002,
+                      "msg": "账号已禁用",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  },
+                  "90003": {
+                    "value": {
+                      "code": 90003,
+                      "msg": "CSRF校验失败",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              10002,
+              90003
+            ]
+          },
+          "500": {
+            "description": "90002 服务内部错误",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "90002": {
+                    "value": {
+                      "code": 90002,
+                      "msg": "服务内部错误",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              90002
+            ]
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginParam"
+              },
+              "example": {
+                "username": "note_admin",
+                "password": "example-password-123"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": [
+          "认证"
+        ],
+        "operationId": "logoutUser",
+        "summary": "注销当前会话",
+        "description": "由 Spring Security LogoutFilter 接收 POST，统一 JSON 响应。要求有效登录与 CSRF；先校验认证，再允许登出处理。撤销当前 Session，清除 Cookie；不影响该用户其他会话。再次登出须先登录，返回 401。",
+        "x-permission": "USER_OR_ADMIN",
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功；见业务结果语义。",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              },
+              "Set-Cookie": {
+                "description": "清除 SESSION，Max-Age=0，Path=/。",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoidResult"
+                },
+                "examples": {
+                  "loggedOut": {
+                    "value": {
+                      "code": 0,
+                      "msg": "成功",
+                      "data": null,
+                      "requestId": "example-request"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "10001 请先登录",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "10001": {
+                    "value": {
+                      "code": 10001,
+                      "msg": "请先登录",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              10001
+            ]
+          },
+          "403": {
+            "description": "10002 账号已禁用；90003 CSRF校验失败",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "10002": {
+                    "value": {
+                      "code": 10002,
+                      "msg": "账号已禁用",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  },
+                  "90003": {
+                    "value": {
+                      "code": 90003,
+                      "msg": "CSRF校验失败",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              10002,
+              90003
+            ]
+          },
+          "500": {
+            "description": "90002 服务内部错误",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "90002": {
+                    "value": {
+                      "code": 90002,
+                      "msg": "服务内部错误",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              90002
+            ]
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ]
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "tags": [
+          "认证"
+        ],
+        "operationId": "getCurrentUser",
+        "summary": "获取当前登录用户",
+        "description": "返回经数据库复核仍启用的当前用户，角色仅来自服务端。过期 Session 返回 401，禁用账号返回 403，不返回密码哈希。",
+        "x-permission": "USER_OR_ADMIN",
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功；见业务结果语义。",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResult"
+                },
+                "examples": {
+                  "currentUser": {
+                    "value": {
+                      "code": 0,
+                      "msg": "成功",
+                      "data": {
+                        "id": "1",
+                        "username": "note_admin",
+                        "role": "ADMIN",
+                        "enabled": true
+                      },
+                      "requestId": "example-request"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "10001 请先登录",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "10001": {
+                    "value": {
+                      "code": 10001,
+                      "msg": "请先登录",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              10001
+            ]
+          },
+          "403": {
+            "description": "10002 账号已禁用",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "10002": {
+                    "value": {
+                      "code": 10002,
+                      "msg": "账号已禁用",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              10002
+            ]
+          },
+          "500": {
+            "description": "90002 服务内部错误",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "90002": {
+                    "value": {
+                      "code": 90002,
+                      "msg": "服务内部错误",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              90002
+            ]
+          }
+        }
+      }
+    },
+    "/api/admin/invitations": {
+      "post": {
+        "tags": [
+          "账号管理"
+        ],
+        "operationId": "createInvitation",
+        "summary": "创建一次性邀请码",
+        "description": "仅 ADMIN；无请求体、无自定义有效期。服务器生成 32 随机字节的 Base64URL 令牌，24 小时有效，存哈希，明文仅此次返回；注册成功后不可再用。",
+        "x-permission": "ADMIN",
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功；见业务结果语义。",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationResult"
+                },
+                "examples": {
+                  "created": {
+                    "value": {
+                      "code": 0,
+                      "msg": "成功",
+                      "data": {
+                        "token": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                        "expiresAt": "2026-11-05T02:00:00Z"
+                      },
+                      "requestId": "example-request"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "10001 请先登录",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "10001": {
+                    "value": {
+                      "code": 10001,
+                      "msg": "请先登录",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              10001
+            ]
+          },
+          "403": {
+            "description": "10002 账号已禁用；10005 无权限执行此操作；90003 CSRF校验失败",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "10002": {
+                    "value": {
+                      "code": 10002,
+                      "msg": "账号已禁用",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  },
+                  "10005": {
+                    "value": {
+                      "code": 10005,
+                      "msg": "无权限执行此操作",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  },
+                  "90003": {
+                    "value": {
+                      "code": 90003,
+                      "msg": "CSRF校验失败",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              10002,
+              10005,
+              90003
+            ]
+          },
+          "500": {
+            "description": "90002 服务内部错误",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "90002": {
+                    "value": {
+                      "code": 90002,
+                      "msg": "服务内部错误",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              90002
+            ]
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ]
+      }
+    },
+    "/api/admin/users": {
+      "get": {
+        "tags": [
+          "账号管理"
+        ],
+        "operationId": "listUsers",
+        "summary": "分页查看账号",
+        "description": "仅 ADMIN。固定 id ASC 排序；超出页尾 records=[]，total 为满足范围的账号总数。无密码、邀请码及私人笔记信息。MVP 只支持 page/size，无任意排序或搜索字段。",
+        "x-permission": "ADMIN",
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功；见业务结果语义。",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPageResult"
+                },
+                "examples": {
+                  "page": {
+                    "value": {
+                      "code": 0,
+                      "msg": "成功",
+                      "data": {
+                        "records": [
+                          {
+                            "id": "1",
+                            "username": "note_admin",
+                            "role": "ADMIN",
+                            "enabled": true
+                          }
+                        ],
+                        "total": 1,
+                        "page": 1,
+                        "size": 20
+                      },
+                      "requestId": "example-request"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "90001 请求参数错误",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "90001": {
+                    "value": {
+                      "code": 90001,
+                      "msg": "请求参数错误",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              90001
+            ]
+          },
+          "401": {
+            "description": "10001 请先登录",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "10001": {
+                    "value": {
+                      "code": 10001,
+                      "msg": "请先登录",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              10001
+            ]
+          },
+          "403": {
+            "description": "10002 账号已禁用；10005 无权限执行此操作",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "10002": {
+                    "value": {
+                      "code": 10002,
+                      "msg": "账号已禁用",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  },
+                  "10005": {
+                    "value": {
+                      "code": 10005,
+                      "msg": "无权限执行此操作",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              10002,
+              10005
+            ]
+          },
+          "500": {
+            "description": "90002 服务内部错误",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "90002": {
+                    "value": {
+                      "code": 90002,
+                      "msg": "服务内部错误",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              90002
+            ]
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/Size"
+          }
+        ]
+      }
+    },
+    "/api/admin/users/status": {
+      "post": {
+        "tags": [
+          "账号管理"
+        ],
+        "operationId": "updateUserStatus",
+        "summary": "启用或禁用账号",
+        "description": "仅 ADMIN；userId 指定目标账号，不是操作者。账号不存在 404；不得禁用自己或最后一个启用管理员，冲突 409。相同状态视为成功。禁用后撤销已有会话，旧 Cookie 请求返回 401；已加载认证的在途请求或正确凭据登录禁用账号返回 403；重新启用不会恢复已撤销会话，需重新登录。",
+        "x-permission": "ADMIN",
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功；见业务结果语义。",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoidResult"
+                },
+                "examples": {
+                  "updated": {
+                    "value": {
+                      "code": 0,
+                      "msg": "成功",
+                      "data": null,
+                      "requestId": "example-request"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "90001 请求参数错误",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "90001": {
+                    "value": {
+                      "code": 90001,
+                      "msg": "请求参数错误",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              90001
+            ]
+          },
+          "401": {
+            "description": "10001 请先登录",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "10001": {
+                    "value": {
+                      "code": 10001,
+                      "msg": "请先登录",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              10001
+            ]
+          },
+          "403": {
+            "description": "10002 账号已禁用；10005 无权限执行此操作；90003 CSRF校验失败",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "10002": {
+                    "value": {
+                      "code": 10002,
+                      "msg": "账号已禁用",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  },
+                  "10005": {
+                    "value": {
+                      "code": 10005,
+                      "msg": "无权限执行此操作",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  },
+                  "90003": {
+                    "value": {
+                      "code": 90003,
+                      "msg": "CSRF校验失败",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              10002,
+              10005,
+              90003
+            ]
+          },
+          "404": {
+            "description": "40001 用户不存在",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "40001": {
+                    "value": {
+                      "code": 40001,
+                      "msg": "用户不存在",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              40001
+            ]
+          },
+          "409": {
+            "description": "40002 不可禁用当前管理员或最后一个启用的管理员",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "40002": {
+                    "value": {
+                      "code": 40002,
+                      "msg": "不可禁用当前管理员或最后一个启用的管理员",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              40002
+            ]
+          },
+          "500": {
+            "description": "90002 服务内部错误",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "90002": {
+                    "value": {
+                      "code": 90002,
+                      "msg": "服务内部错误",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              90002
+            ]
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserStatusParam"
+              },
+              "example": {
+                "userId": "2",
+                "enabled": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notes/upload": {
+      "post": {
+        "tags": [
+          "私人笔记"
+        ],
+        "operationId": "uploadNote",
+        "summary": "上传 Markdown 并完成索引",
+        "description": "同步接口，成功即原文、解析文本、全部分块与向量在数据库中提交，status=READY。只接收单个 file；缺文件、多 file、无文件名、含 NUL 或未知字段返回 90001。支持 UTF-8 BOM；非法编码 20003；空白或解析后无文本 20004。文件最多 2 MiB，整个 multipart 请求最多 3 MiB，超限 413/20002。每用户最多 100 篇、每篇最多 128 块。SHA-256 按原始字节计算；本人同字节内容复用旧 ID，duplicated=true，不改旧标题/文件名/时间，不重复调用 Embedding；同名不同内容创建新笔记。重复检查优先于配额，已满仍可返回已有记录。模型或持久化失败不留半成品；未返回成功时可原文件重试，但远程 Embedding 可能重复计费。单实例最多 2 个并发上传，超出 429。同步上传含模型总预算 90 秒。",
+        "x-permission": "USER_OR_ADMIN",
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功；见业务结果语义。",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteResult"
+                },
+                "examples": {
+                  "created": {
+                    "value": {
+                      "code": 0,
+                      "msg": "成功",
+                      "data": {
+                        "noteId": "37ee1287-356e-46aa-a2d4-8876f9985074",
+                        "title": "Redis 笔记",
+                        "originalFilename": "redis.md",
+                        "byteSize": 76,
+                        "chunkCount": 1,
+                        "status": "READY",
+                        "duplicated": false,
+                        "createdAt": "2026-11-04T02:00:00Z"
+                      },
+                      "requestId": "example-request"
+                    }
+                  },
+                  "deduplicated": {
+                    "value": {
+                      "code": 0,
+                      "msg": "成功",
+                      "data": {
+                        "noteId": "37ee1287-356e-46aa-a2d4-8876f9985074",
+                        "title": "Redis 笔记",
+                        "originalFilename": "redis.md",
+                        "byteSize": 76,
+                        "chunkCount": 1,
+                        "status": "READY",
+                        "duplicated": true,
+                        "createdAt": "2026-11-04T02:00:00Z"
+                      },
+                      "requestId": "example-request"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "20001 仅支持Markdown文件；20003 文件必须使用合法UTF-8编码；20004 笔记内容为空；20005 笔记分块数超过限制；90001 请求参数错误",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "20001": {
+                    "value": {
+                      "code": 20001,
+                      "msg": "仅支持Markdown文件",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  },
+                  "20003": {
+                    "value": {
+                      "code": 20003,
+                      "msg": "文件必须使用合法UTF-8编码",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  },
+                  "20004": {
+                    "value": {
+                      "code": 20004,
+                      "msg": "笔记内容为空",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  },
+                  "20005": {
+                    "value": {
+                      "code": 20005,
+                      "msg": "笔记分块数超过限制",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  },
+                  "90001": {
+                    "value": {
+                      "code": 90001,
+                      "msg": "请求参数错误",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              20001,
+              20003,
+              20004,
+              20005,
+              90001
+            ]
+          },
+          "401": {
+            "description": "10001 请先登录",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "10001": {
+                    "value": {
+                      "code": 10001,
+                      "msg": "请先登录",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              10001
+            ]
+          },
+          "403": {
+            "description": "10002 账号已禁用；90003 CSRF校验失败",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "10002": {
+                    "value": {
+                      "code": 10002,
+                      "msg": "账号已禁用",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  },
+                  "90003": {
+                    "value": {
+                      "code": 90003,
+                      "msg": "CSRF校验失败",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              10002,
+              90003
+            ]
+          },
+          "409": {
+            "description": "20007 笔记数量超过配额",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "20007": {
+                    "value": {
+                      "code": 20007,
+                      "msg": "笔记数量超过配额",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              20007
+            ]
+          },
+          "413": {
+            "description": "20002 文件超过大小限制",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "20002": {
+                    "value": {
+                      "code": 20002,
+                      "msg": "文件超过大小限制",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              20002
+            ]
+          },
+          "429": {
+            "description": "30003 请求超过并发或模型限额。客户端显式决定是否重试，可能产生重复模型费用。",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "30003": {
+                    "value": {
+                      "code": 30003,
+                      "msg": "请求超过并发或模型限额",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              30003
+            ]
+          },
+          "500": {
+            "description": "90002 服务内部错误",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "90002": {
+                    "value": {
+                      "code": 90002,
+                      "msg": "服务内部错误",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              90002
+            ]
+          },
+          "502": {
+            "description": "30001 模型服务不可用",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "30001": {
+                    "value": {
+                      "code": 30001,
+                      "msg": "模型服务不可用",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              30001
+            ]
+          },
+          "503": {
+            "description": "20008 向量模型配置不一致",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "20008": {
+                    "value": {
+                      "code": 20008,
+                      "msg": "向量模型配置不一致",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              20008
+            ]
+          },
+          "504": {
+            "description": "30002 模型响应超时",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "30002": {
+                    "value": {
+                      "code": 30002,
+                      "msg": "模型响应超时",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              30002
+            ]
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "单个 UTF-8 .md 文件，扩展名忽略大小写；最大 2097152 字节。文件流实测大小，不能信任 Content-Type 或 Content-Length。"
+                  },
+                  "title": {
+                    "type": "string",
+                    "description": "可省略；提供时 1—200 字符且不能全空白。省略时首个 H1 → 去扩展名文件名；自动标题去首尾空白，最多 200 码点。",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "pattern": ".*\\S.*",
+                    "nullable": true
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notes": {
+      "get": {
+        "tags": [
+          "私人笔记"
+        ],
+        "operationId": "listNotes",
+        "summary": "分页查看本人笔记",
+        "description": "只列当前登录用户所有 READY 笔记；ADMIN 也只能列本人笔记。固定 createdAt DESC,noteId DESC 排序，page/size 默认 1/20，最大 100，越界页返回空 records 和实际 total；duplicated=false。",
+        "x-permission": "USER_OR_ADMIN",
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功；见业务结果语义。",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotePageResult"
+                },
+                "examples": {
+                  "page": {
+                    "value": {
+                      "code": 0,
+                      "msg": "成功",
+                      "data": {
+                        "records": [
+                          {
+                            "noteId": "37ee1287-356e-46aa-a2d4-8876f9985074",
+                            "title": "Redis 笔记",
+                            "originalFilename": "redis.md",
+                            "byteSize": 76,
+                            "chunkCount": 1,
+                            "status": "READY",
+                            "duplicated": false,
+                            "createdAt": "2026-11-04T02:00:00Z"
+                          }
+                        ],
+                        "total": 1,
+                        "page": 1,
+                        "size": 20
+                      },
+                      "requestId": "example-request"
+                    }
+                  },
+                  "empty": {
+                    "value": {
+                      "code": 0,
+                      "msg": "成功",
+                      "data": {
+                        "records": [],
+                        "total": 0,
+                        "page": 1,
+                        "size": 20
+                      },
+                      "requestId": "example-request"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "90001 请求参数错误",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "90001": {
+                    "value": {
+                      "code": 90001,
+                      "msg": "请求参数错误",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              90001
+            ]
+          },
+          "401": {
+            "description": "10001 请先登录",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "10001": {
+                    "value": {
+                      "code": 10001,
+                      "msg": "请先登录",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              10001
+            ]
+          },
+          "403": {
+            "description": "10002 账号已禁用",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "10002": {
+                    "value": {
+                      "code": 10002,
+                      "msg": "账号已禁用",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              10002
+            ]
+          },
+          "500": {
+            "description": "90002 服务内部错误",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "90002": {
+                    "value": {
+                      "code": 90002,
+                      "msg": "服务内部错误",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              90002
+            ]
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/Size"
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "私人笔记"
+        ],
+        "operationId": "deleteNote",
+        "summary": "删除本人笔记及分块",
+        "description": "按 ownerId + noteId 在同一事务硬删除笔记并级联分块；成功后开始的检索不可命中。首次成功 200/data=null；重复删除、不存在或越权统一 404/20006。删除过程中已发送给模型的上下文无法撤回；在途问答返回前复查来源，已删除则 409。",
+        "x-permission": "USER_OR_ADMIN",
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功；见业务结果语义。",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoidResult"
+                },
+                "examples": {
+                  "deleted": {
+                    "value": {
+                      "code": 0,
+                      "msg": "成功",
+                      "data": null,
+                      "requestId": "example-request"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "90001 请求参数错误",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "90001": {
+                    "value": {
+                      "code": 90001,
+                      "msg": "请求参数错误",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              90001
+            ]
+          },
+          "401": {
+            "description": "10001 请先登录",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "10001": {
+                    "value": {
+                      "code": 10001,
+                      "msg": "请先登录",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              10001
+            ]
+          },
+          "403": {
+            "description": "10002 账号已禁用；90003 CSRF校验失败",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "10002": {
+                    "value": {
+                      "code": 10002,
+                      "msg": "账号已禁用",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  },
+                  "90003": {
+                    "value": {
+                      "code": 90003,
+                      "msg": "CSRF校验失败",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              10002,
+              90003
+            ]
+          },
+          "404": {
+            "description": "20006 笔记不存在",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "20006": {
+                    "value": {
+                      "code": 20006,
+                      "msg": "笔记不存在",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              20006
+            ]
+          },
+          "500": {
+            "description": "90002 服务内部错误",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "90002": {
+                    "value": {
+                      "code": 90002,
+                      "msg": "服务内部错误",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              90002
+            ]
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          },
+          {
+            "$ref": "#/components/parameters/NoteId"
+          }
+        ]
+      }
+    },
+    "/api/notes/detail": {
+      "get": {
+        "tags": [
+          "私人笔记"
+        ],
+        "operationId": "getNoteDetail",
+        "summary": "读取本人笔记正文",
+        "description": "noteId 使用查询参数，不存在、已删除或不属于本人统一 404/20006，不能依角色读取他人笔记。返回元数据、rawMarkdown、plainText；不返回所有分块或向量。duplicated=false；客户端渲染必须清洗 HTML。",
+        "x-permission": "USER_OR_ADMIN",
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功；见业务结果语义。",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteDetailResult"
+                },
+                "examples": {
+                  "detail": {
+                    "value": {
+                      "code": 0,
+                      "msg": "成功",
+                      "data": {
+                        "noteId": "37ee1287-356e-46aa-a2d4-8876f9985074",
+                        "title": "Redis 笔记",
+                        "originalFilename": "redis.md",
+                        "byteSize": 76,
+                        "chunkCount": 1,
+                        "status": "READY",
+                        "duplicated": false,
+                        "createdAt": "2026-11-04T02:00:00Z",
+                        "rawMarkdown": "# Redis 笔记\n缓存穿透可使用布隆过滤器和空值缓存处理。\n",
+                        "plainText": "Redis 笔记\n缓存穿透可使用布隆过滤器和空值缓存处理。"
+                      },
+                      "requestId": "example-request"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "90001 请求参数错误",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "90001": {
+                    "value": {
+                      "code": 90001,
+                      "msg": "请求参数错误",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              90001
+            ]
+          },
+          "401": {
+            "description": "10001 请先登录",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "10001": {
+                    "value": {
+                      "code": 10001,
+                      "msg": "请先登录",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              10001
+            ]
+          },
+          "403": {
+            "description": "10002 账号已禁用",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "10002": {
+                    "value": {
+                      "code": 10002,
+                      "msg": "账号已禁用",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              10002
+            ]
+          },
+          "404": {
+            "description": "20006 笔记不存在",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "20006": {
+                    "value": {
+                      "code": 20006,
+                      "msg": "笔记不存在",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              20006
+            ]
+          },
+          "500": {
+            "description": "90002 服务内部错误",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "90002": {
+                    "value": {
+                      "code": 90002,
+                      "msg": "服务内部错误",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              90002
+            ]
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/NoteId"
+          }
+        ]
+      }
+    },
+    "/api/chat/ask": {
+      "post": {
+        "tags": [
+          "笔记问答"
+        ],
+        "operationId": "askNotes",
+        "summary": "基于本人笔记单轮回答",
+        "description": "固定 RAG 图：验证账号/范围→检索→有证据时生成→校验来源与引用；不联网、不执行工具、不保存会话。请求无模型参数和 ownerId。显式 noteIds 中任一无权/不存在则整个请求 404，禁止悄悄扩大为全库；重复 ID 去重。本人无笔记时直接 NO_EVIDENCE 且不调用任何模型；检索无命中时不调用 Chat。一次查询向量、一次回答生成；最多 6 个来源，证据最多 4000 tokens。模型引用不存在、缺失或格式无效时，返回 EVIDENCE_ONLY、固定降级提示与有效来源，不补一次自由聊天；模型判断证据不足时 NO_EVIDENCE，可保留已检索来源。ANSWERED 必须至少一个 [Sx] 且均在本次 sources。返回前复查账号和来源；禁用 403，来源变更 409 丢弃答案。单实例最多 4 个并发问答，超出 429；总预算 90 秒，模型失败不伪造回答。",
+        "x-permission": "USER_OR_ADMIN",
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功；见业务结果语义。",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AskQuestionResult"
+                },
+                "examples": {
+                  "answered": {
+                    "value": {
+                      "code": 0,
+                      "msg": "成功",
+                      "data": {
+                        "answer": "笔记建议使用布隆过滤器和空值缓存。[S1]",
+                        "status": "ANSWERED",
+                        "sources": [
+                          {
+                            "sourceId": "S1",
+                            "noteId": "37ee1287-356e-46aa-a2d4-8876f9985074",
+                            "chunkId": "01aeb314-63d9-416e-b6c8-123ec927e516",
+                            "title": "Redis 笔记",
+                            "headingPath": "Redis 笔记",
+                            "startLine": 1,
+                            "endLine": 2,
+                            "snippet": "缓存穿透可使用布隆过滤器和空值缓存处理。",
+                            "score": 0.86
+                          }
+                        ]
+                      },
+                      "requestId": "example-request"
+                    }
+                  },
+                  "noEvidence": {
+                    "value": {
+                      "code": 0,
+                      "msg": "成功",
+                      "data": {
+                        "answer": "在你的笔记中未找到足够依据",
+                        "status": "NO_EVIDENCE",
+                        "sources": []
+                      },
+                      "requestId": "example-request"
+                    }
+                  },
+                  "evidenceOnly": {
+                    "value": {
+                      "code": 0,
+                      "msg": "成功",
+                      "data": {
+                        "answer": "回答未通过引用校验，请参考以下笔记片段。",
+                        "status": "EVIDENCE_ONLY",
+                        "sources": [
+                          {
+                            "sourceId": "S1",
+                            "noteId": "37ee1287-356e-46aa-a2d4-8876f9985074",
+                            "chunkId": "01aeb314-63d9-416e-b6c8-123ec927e516",
+                            "title": "Redis 笔记",
+                            "headingPath": "Redis 笔记",
+                            "startLine": 1,
+                            "endLine": 2,
+                            "snippet": "缓存穿透可使用布隆过滤器和空值缓存处理。",
+                            "score": 0.86
+                          }
+                        ]
+                      },
+                      "requestId": "example-request"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "90001 请求参数错误",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "90001": {
+                    "value": {
+                      "code": 90001,
+                      "msg": "请求参数错误",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              90001
+            ]
+          },
+          "401": {
+            "description": "10001 请先登录",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "10001": {
+                    "value": {
+                      "code": 10001,
+                      "msg": "请先登录",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              10001
+            ]
+          },
+          "403": {
+            "description": "10002 账号已禁用；90003 CSRF校验失败",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "10002": {
+                    "value": {
+                      "code": 10002,
+                      "msg": "账号已禁用",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  },
+                  "90003": {
+                    "value": {
+                      "code": 90003,
+                      "msg": "CSRF校验失败",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              10002,
+              90003
+            ]
+          },
+          "404": {
+            "description": "20006 笔记不存在",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "20006": {
+                    "value": {
+                      "code": 20006,
+                      "msg": "笔记不存在",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              20006
+            ]
+          },
+          "409": {
+            "description": "30004 回答期间笔记来源已变更",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "30004": {
+                    "value": {
+                      "code": 30004,
+                      "msg": "回答期间笔记来源已变更",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              30004
+            ]
+          },
+          "429": {
+            "description": "30003 请求超过并发或模型限额。客户端显式决定是否重试，可能产生重复模型费用。",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "30003": {
+                    "value": {
+                      "code": 30003,
+                      "msg": "请求超过并发或模型限额",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              30003
+            ]
+          },
+          "500": {
+            "description": "90002 服务内部错误",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "90002": {
+                    "value": {
+                      "code": 90002,
+                      "msg": "服务内部错误",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              90002
+            ]
+          },
+          "502": {
+            "description": "30001 模型服务不可用",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "30001": {
+                    "value": {
+                      "code": 30001,
+                      "msg": "模型服务不可用",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              30001
+            ]
+          },
+          "503": {
+            "description": "20008 向量模型配置不一致",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "20008": {
+                    "value": {
+                      "code": 20008,
+                      "msg": "向量模型配置不一致",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              20008
+            ]
+          },
+          "504": {
+            "description": "30002 模型响应超时",
+            "headers": {
+              "X-Request-Id": {
+                "description": "服务端生成的请求编号。",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "私人数据及凭据响应禁止缓存。",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResult"
+                },
+                "examples": {
+                  "30002": {
+                    "value": {
+                      "code": 30002,
+                      "msg": "模型响应超时",
+                      "data": null,
+                      "requestId": "example-error"
+                    }
+                  }
+                }
+              }
+            },
+            "x-business-codes": [
+              30002
+            ]
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AskQuestionParam"
+              },
+              "example": {
+                "question": "缓存穿透怎么处理？",
+                "noteIds": [
+                  "37ee1287-356e-46aa-a2d4-8876f9985074"
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "SessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "SESSION",
+        "description": "Spring Session JDBC 会话；空闲 30 分钟，HttpOnly、SameSite=Lax，生产 HTTPS Secure。"
+      }
+    },
+    "parameters": {
+      "CsrfToken": {
+        "name": "X-XSRF-TOKEN",
+        "in": "header",
+        "required": true,
+        "description": "来自 GET /api/auth/csrf 的 token；必须同时携带取得该令牌时的 Session Cookie。",
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "NoteId": {
+        "name": "noteId",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "description": "笔记 UUID；缺失或格式错误 400。",
+          "format": "uuid"
+        }
+      },
+      "Page": {
+        "name": "page",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647,
+          "default": 1,
+          "description": "页码，从 1 开始。"
+        }
+      },
+      "Size": {
+        "name": "size",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 20,
+          "description": "每页条数。"
+        }
+      }
+    },
+    "schemas": {
+      "UserRole": {
+        "type": "string",
+        "enum": [
+          "USER",
+          "ADMIN"
+        ],
+        "x-java-class": "com.sya.ragnote.enums.user.UserRole"
+      },
+      "NoteStatus": {
+        "type": "string",
+        "enum": [
+          "READY"
+        ],
+        "x-java-class": "com.sya.ragnote.enums.note.NoteStatus"
+      },
+      "AnswerStatus": {
+        "type": "string",
+        "enum": [
+          "ANSWERED",
+          "NO_EVIDENCE",
+          "EVIDENCE_ONLY"
+        ],
+        "x-java-class": "com.sya.ragnote.enums.chat.AnswerStatus"
+      },
+      "LoginParam": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "username": {
+            "type": "string",
+            "description": "3—32 位 ASCII 字母、数字或下划线；服务端转小写后作为唯一用户名。",
+            "pattern": "^[a-zA-Z0-9_]{3,32}$",
+            "minLength": 3,
+            "maxLength": 32,
+            "example": "note_user"
+          },
+          "password": {
+            "type": "string",
+            "description": "12—64 字符，UTF-8 编码最多 72 字节；不去首尾空白，不写日志。",
+            "minLength": 12,
+            "maxLength": 64,
+            "writeOnly": true,
+            "format": "password"
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ],
+        "x-java-class": "com.sya.ragnote.param.auth.LoginParam"
+      },
+      "RegisterParam": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "username": {
+            "type": "string",
+            "description": "3—32 位 ASCII 字母、数字或下划线；服务端转小写后作为唯一用户名。",
+            "pattern": "^[a-zA-Z0-9_]{3,32}$",
+            "minLength": 3,
+            "maxLength": 32,
+            "example": "note_user"
+          },
+          "password": {
+            "type": "string",
+            "description": "12—64 字符，UTF-8 编码最多 72 字节；不去首尾空白，不写日志。",
+            "minLength": 12,
+            "maxLength": 64,
+            "writeOnly": true,
+            "format": "password"
+          },
+          "inviteToken": {
+            "type": "string",
+            "description": "32 随机字节的无填充 Base64URL 一次性邀请码；有效期 24 小时。",
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "minLength": 43,
+            "maxLength": 43,
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "username",
+          "password",
+          "inviteToken"
+        ],
+        "x-java-class": "com.sya.ragnote.param.auth.RegisterParam"
+      },
+      "PageParam": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647,
+            "default": 1,
+            "description": "页码，从 1 开始。"
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 20,
+            "description": "每页条数。"
+          }
+        },
+        "x-java-class": "com.sya.ragnote.param.common.PageParam"
+      },
+      "QueryNoteParam": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647,
+            "default": 1,
+            "description": "页码，从 1 开始。"
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 20,
+            "description": "每页条数。"
+          }
+        },
+        "x-java-class": "com.sya.ragnote.param.note.QueryNoteParam"
+      },
+      "QueryUserParam": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647,
+            "default": 1,
+            "description": "页码，从 1 开始。"
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 20,
+            "description": "每页条数。"
+          }
+        },
+        "x-java-class": "com.sya.ragnote.param.user.QueryUserParam"
+      },
+      "UploadNoteParam": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "可省略；提供时 1—200 字符且不能全空白。省略时首个 H1 → 去扩展名文件名；自动标题去首尾空白，最多 200 码点。",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": ".*\\S.*",
+            "nullable": true
+          }
+        },
+        "x-java-class": "com.sya.ragnote.param.note.UploadNoteParam"
+      },
+      "UpdateUserStatusParam": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "userId": {
+            "type": "string",
+            "description": "正整数十进制字符串，范围 1—9223372036854775807，避免前端精度丢失。",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "example": "1",
+            "x-maximum-decimal": "9223372036854775807"
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "true 启用；false 禁用。不得为 null。"
+          }
+        },
+        "required": [
+          "userId",
+          "enabled"
+        ],
+        "x-java-class": "com.sya.ragnote.param.user.UpdateUserStatusParam"
+      },
+      "AskQuestionParam": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "question": {
+            "type": "string",
+            "description": "单轮问题，不可全空白；不在服务端保存聊天历史。",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": ".*\\S.*",
+            "example": "我的笔记里，缓存穿透怎么处理？"
+          },
+          "noteIds": {
+            "type": "array",
+            "nullable": true,
+            "minItems": 1,
+            "maxItems": 20,
+            "items": {
+              "type": "string",
+              "description": "本人笔记 ID。",
+              "format": "uuid"
+            },
+            "description": "省略或 null 表示本人全库；显式 [] 非法。最多 20 项，元素非空；服务端去重，任一不存在或越权则整体 404，不退回全库。"
+          }
+        },
+        "required": [
+          "question"
+        ],
+        "x-java-class": "com.sya.ragnote.param.chat.AskQuestionParam"
+      },
+      "UserVo": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "正整数十进制字符串，范围 1—9223372036854775807，避免前端精度丢失。",
+            "pattern": "^[1-9][0-9]{0,18}$",
+            "example": "1",
+            "x-maximum-decimal": "9223372036854775807"
+          },
+          "username": {
+            "type": "string",
+            "description": "标准化为小写的用户名。"
+          },
+          "role": {
+            "$ref": "#/components/schemas/UserRole"
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "username",
+          "role",
+          "enabled"
+        ],
+        "x-java-class": "com.sya.ragnote.vo.user.UserVo"
+      },
+      "CsrfVo": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "提交写请求前取得的 CSRF 令牌；登录、登出后须重新获取。"
+          },
+          "headerName": {
+            "type": "string",
+            "enum": [
+              "X-XSRF-TOKEN"
+            ]
+          }
+        },
+        "required": [
+          "token",
+          "headerName"
+        ],
+        "x-java-class": "com.sya.ragnote.vo.auth.CsrfVo"
+      },
+      "InvitationVo": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "仅本次返回的邀请码明文；服务端仅存哈希。",
+            "pattern": "^[A-Za-z0-9_-]{43}$"
+          },
+          "expiresAt": {
+            "type": "string",
+            "description": "UTC 过期时间，创建后 24 小时。",
+            "format": "date-time",
+            "example": "2026-11-04T02:00:00Z"
+          }
+        },
+        "required": [
+          "token",
+          "expiresAt"
+        ],
+        "x-java-class": "com.sya.ragnote.vo.auth.InvitationVo"
+      },
+      "NoteVo": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "noteId": {
+            "type": "string",
+            "description": "笔记编号。",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "description": "展示标题。",
+            "maxLength": 200
+          },
+          "originalFilename": {
+            "type": "string",
+            "description": "去除目录的原文件名，仅用于展示，不能当作磁盘路径。",
+            "maxLength": 255
+          },
+          "byteSize": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2097152,
+            "description": "原始上传文件字节数，包含 BOM 和原换行。"
+          },
+          "chunkCount": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 128
+          },
+          "status": {
+            "$ref": "#/components/schemas/NoteStatus"
+          },
+          "duplicated": {
+            "type": "boolean",
+            "description": "仅上传去重命中时为 true；列表和详情固定 false。"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "首次成功入库时间；重复上传不修改。",
+            "format": "date-time",
+            "example": "2026-11-04T02:00:00Z"
+          }
+        },
+        "required": [
+          "noteId",
+          "title",
+          "originalFilename",
+          "byteSize",
+          "chunkCount",
+          "status",
+          "duplicated",
+          "createdAt"
+        ],
+        "x-java-class": "com.sya.ragnote.vo.note.NoteVo"
+      },
+      "NoteDetailVo": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "noteId": {
+            "type": "string",
+            "description": "笔记编号。",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "description": "展示标题。",
+            "maxLength": 200
+          },
+          "originalFilename": {
+            "type": "string",
+            "description": "去除目录的原文件名，仅用于展示，不能当作磁盘路径。",
+            "maxLength": 255
+          },
+          "byteSize": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2097152,
+            "description": "原始上传文件字节数，包含 BOM 和原换行。"
+          },
+          "chunkCount": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 128
+          },
+          "status": {
+            "$ref": "#/components/schemas/NoteStatus"
+          },
+          "duplicated": {
+            "type": "boolean",
+            "description": "仅上传去重命中时为 true；列表和详情固定 false。"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "首次成功入库时间；重复上传不修改。",
+            "format": "date-time",
+            "example": "2026-11-04T02:00:00Z"
+          },
+          "rawMarkdown": {
+            "type": "string",
+            "description": "Markdown 原文；客户端渲染 HTML 前必须清洗。"
+          },
+          "plainText": {
+            "type": "string",
+            "description": "解析后的正文，含代码、列表、表格文本。"
+          }
+        },
+        "required": [
+          "noteId",
+          "title",
+          "originalFilename",
+          "byteSize",
+          "chunkCount",
+          "status",
+          "duplicated",
+          "createdAt",
+          "rawMarkdown",
+          "plainText"
+        ],
+        "x-java-class": "com.sya.ragnote.vo.note.NoteDetailVo"
+      },
+      "SourceVo": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "sourceId": {
+            "type": "string",
+            "description": "本次响应内的来源编号，不是永久资源 ID。",
+            "pattern": "^S[1-6]$"
+          },
+          "noteId": {
+            "type": "string",
+            "description": "本人笔记编号。",
+            "format": "uuid"
+          },
+          "chunkId": {
+            "type": "string",
+            "description": "引用分块编号。",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "description": "笔记标题。"
+          },
+          "headingPath": {
+            "type": "string",
+            "description": "完整章节路径；没有标题时为空串。"
+          },
+          "startLine": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "原文起始行，从 1 开始，包含此行。"
+          },
+          "endLine": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "原文结束行，包含此行，且 >= startLine。"
+          },
+          "snippet": {
+            "type": "string",
+            "description": "原文摘要片段，最多 500 字符；不返回向量。",
+            "maxLength": 500
+          },
+          "score": {
+            "type": "number",
+            "format": "double",
+            "minimum": -1,
+            "maximum": 1,
+            "description": "余弦相似度，不是答案正确概率。"
+          }
+        },
+        "required": [
+          "sourceId",
+          "noteId",
+          "chunkId",
+          "title",
+          "headingPath",
+          "startLine",
+          "endLine",
+          "snippet",
+          "score"
+        ],
+        "x-java-class": "com.sya.ragnote.vo.chat.SourceVo"
+      },
+      "AskQuestionVo": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "answer": {
+            "type": "string",
+            "description": "回答正文；引用格式为 [S1]，只能引用本次 sources。"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AnswerStatus"
+          },
+          "sources": {
+            "type": "array",
+            "maxItems": 6,
+            "items": {
+              "$ref": "#/components/schemas/SourceVo"
+            },
+            "description": "仅本次经归属与存续校验的来源。NO_EVIDENCE 无命中时 []，有检索片段但模型判断不足时可保留来源并明确不足。"
+          }
+        },
+        "required": [
+          "answer",
+          "status",
+          "sources"
+        ],
+        "x-java-class": "com.sya.ragnote.vo.chat.AskQuestionVo"
+      },
+      "NotePageVo": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "records": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NoteVo"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "records",
+          "total",
+          "page",
+          "size"
+        ],
+        "x-java-class": "com.sya.ragnote.vo.common.PageVo"
+      },
+      "UserPageVo": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "records": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserVo"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "records",
+          "total",
+          "page",
+          "size"
+        ],
+        "x-java-class": "com.sya.ragnote.vo.common.PageVo"
+      },
+      "CsrfResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "integer",
+            "enum": [
+              0
+            ]
+          },
+          "msg": {
+            "type": "string",
+            "enum": [
+              "成功"
+            ]
+          },
+          "data": {
+            "$ref": "#/components/schemas/CsrfVo"
+          },
+          "requestId": {
+            "type": "string",
+            "description": "服务端生成的请求编号，与响应头 X-Request-Id 一致。",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "code",
+          "msg",
+          "data",
+          "requestId"
+        ],
+        "x-java-class": "com.sya.ragnote.vo.common.ResultVo"
+      },
+      "UserResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "integer",
+            "enum": [
+              0
+            ]
+          },
+          "msg": {
+            "type": "string",
+            "enum": [
+              "成功"
+            ]
+          },
+          "data": {
+            "$ref": "#/components/schemas/UserVo"
+          },
+          "requestId": {
+            "type": "string",
+            "description": "服务端生成的请求编号，与响应头 X-Request-Id 一致。",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "code",
+          "msg",
+          "data",
+          "requestId"
+        ],
+        "x-java-class": "com.sya.ragnote.vo.common.ResultVo"
+      },
+      "InvitationResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "integer",
+            "enum": [
+              0
+            ]
+          },
+          "msg": {
+            "type": "string",
+            "enum": [
+              "成功"
+            ]
+          },
+          "data": {
+            "$ref": "#/components/schemas/InvitationVo"
+          },
+          "requestId": {
+            "type": "string",
+            "description": "服务端生成的请求编号，与响应头 X-Request-Id 一致。",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "code",
+          "msg",
+          "data",
+          "requestId"
+        ],
+        "x-java-class": "com.sya.ragnote.vo.common.ResultVo"
+      },
+      "NoteResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "integer",
+            "enum": [
+              0
+            ]
+          },
+          "msg": {
+            "type": "string",
+            "enum": [
+              "成功"
+            ]
+          },
+          "data": {
+            "$ref": "#/components/schemas/NoteVo"
+          },
+          "requestId": {
+            "type": "string",
+            "description": "服务端生成的请求编号，与响应头 X-Request-Id 一致。",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "code",
+          "msg",
+          "data",
+          "requestId"
+        ],
+        "x-java-class": "com.sya.ragnote.vo.common.ResultVo"
+      },
+      "NoteDetailResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "integer",
+            "enum": [
+              0
+            ]
+          },
+          "msg": {
+            "type": "string",
+            "enum": [
+              "成功"
+            ]
+          },
+          "data": {
+            "$ref": "#/components/schemas/NoteDetailVo"
+          },
+          "requestId": {
+            "type": "string",
+            "description": "服务端生成的请求编号，与响应头 X-Request-Id 一致。",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "code",
+          "msg",
+          "data",
+          "requestId"
+        ],
+        "x-java-class": "com.sya.ragnote.vo.common.ResultVo"
+      },
+      "NotePageResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "integer",
+            "enum": [
+              0
+            ]
+          },
+          "msg": {
+            "type": "string",
+            "enum": [
+              "成功"
+            ]
+          },
+          "data": {
+            "$ref": "#/components/schemas/NotePageVo"
+          },
+          "requestId": {
+            "type": "string",
+            "description": "服务端生成的请求编号，与响应头 X-Request-Id 一致。",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "code",
+          "msg",
+          "data",
+          "requestId"
+        ],
+        "x-java-class": "com.sya.ragnote.vo.common.ResultVo"
+      },
+      "UserPageResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "integer",
+            "enum": [
+              0
+            ]
+          },
+          "msg": {
+            "type": "string",
+            "enum": [
+              "成功"
+            ]
+          },
+          "data": {
+            "$ref": "#/components/schemas/UserPageVo"
+          },
+          "requestId": {
+            "type": "string",
+            "description": "服务端生成的请求编号，与响应头 X-Request-Id 一致。",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "code",
+          "msg",
+          "data",
+          "requestId"
+        ],
+        "x-java-class": "com.sya.ragnote.vo.common.ResultVo"
+      },
+      "AskQuestionResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "integer",
+            "enum": [
+              0
+            ]
+          },
+          "msg": {
+            "type": "string",
+            "enum": [
+              "成功"
+            ]
+          },
+          "data": {
+            "$ref": "#/components/schemas/AskQuestionVo"
+          },
+          "requestId": {
+            "type": "string",
+            "description": "服务端生成的请求编号，与响应头 X-Request-Id 一致。",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "code",
+          "msg",
+          "data",
+          "requestId"
+        ],
+        "x-java-class": "com.sya.ragnote.vo.common.ResultVo"
+      },
+      "VoidResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "integer",
+            "enum": [
+              0
+            ]
+          },
+          "msg": {
+            "type": "string",
+            "enum": [
+              "成功"
+            ]
+          },
+          "data": {
+            "type": "object",
+            "nullable": true,
+            "enum": [
+              null
+            ],
+            "description": "无返回值固定为 null。"
+          },
+          "requestId": {
+            "type": "string",
+            "description": "服务端生成的请求编号，与响应头 X-Request-Id 一致。",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "code",
+          "msg",
+          "data",
+          "requestId"
+        ],
+        "x-java-class": "com.sya.ragnote.vo.common.ResultVo"
+      },
+      "ErrorResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "integer",
+            "enum": [
+              10001,
+              10002,
+              10003,
+              10004,
+              10005,
+              20001,
+              20002,
+              20003,
+              20004,
+              20005,
+              20006,
+              20007,
+              20008,
+              30001,
+              30002,
+              30003,
+              30004,
+              40001,
+              40002,
+              90001,
+              90002,
+              90003
+            ]
+          },
+          "msg": {
+            "type": "string",
+            "description": "对应结果枚举的固定文案，不拼接底层异常或用户内容。"
+          },
+          "data": {
+            "type": "object",
+            "nullable": true,
+            "enum": [
+              null
+            ]
+          },
+          "requestId": {
+            "type": "string",
+            "description": "服务端请求编号。",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "code",
+          "msg",
+          "data",
+          "requestId"
+        ],
+        "x-java-class": "com.sya.ragnote.vo.common.ResultVo"
+      }
+    }
+  },
+  "x-error-catalog": {
+    "10001": {
+      "name": "NOT_AUTHENTICATED",
+      "enum": "AuthResultEnum",
+      "message": "请先登录",
+      "httpStatus": 401
+    },
+    "10002": {
+      "name": "ACCOUNT_DISABLED",
+      "enum": "AuthResultEnum",
+      "message": "账号已禁用",
+      "httpStatus": 403
+    },
+    "10003": {
+      "name": "INVALID_CREDENTIALS",
+      "enum": "AuthResultEnum",
+      "message": "用户名或密码错误",
+      "httpStatus": 401
+    },
+    "10004": {
+      "name": "REGISTRATION_FAILED",
+      "enum": "AuthResultEnum",
+      "message": "注册失败，请检查用户名和邀请码",
+      "httpStatus": 400
+    },
+    "10005": {
+      "name": "PERMISSION_DENIED",
+      "enum": "AuthResultEnum",
+      "message": "无权限执行此操作",
+      "httpStatus": 403
+    },
+    "20001": {
+      "name": "UNSUPPORTED_FILE_TYPE",
+      "enum": "NoteResultEnum",
+      "message": "仅支持Markdown文件",
+      "httpStatus": 400
+    },
+    "20002": {
+      "name": "FILE_TOO_LARGE",
+      "enum": "NoteResultEnum",
+      "message": "文件超过大小限制",
+      "httpStatus": 413
+    },
+    "20003": {
+      "name": "INVALID_FILE_ENCODING",
+      "enum": "NoteResultEnum",
+      "message": "文件必须使用合法UTF-8编码",
+      "httpStatus": 400
+    },
+    "20004": {
+      "name": "EMPTY_NOTE_CONTENT",
+      "enum": "NoteResultEnum",
+      "message": "笔记内容为空",
+      "httpStatus": 400
+    },
+    "20005": {
+      "name": "CHUNK_LIMIT_EXCEEDED",
+      "enum": "NoteResultEnum",
+      "message": "笔记分块数超过限制",
+      "httpStatus": 400
+    },
+    "20006": {
+      "name": "NOTE_NOT_FOUND",
+      "enum": "NoteResultEnum",
+      "message": "笔记不存在",
+      "httpStatus": 404
+    },
+    "20007": {
+      "name": "NOTE_QUOTA_EXCEEDED",
+      "enum": "NoteResultEnum",
+      "message": "笔记数量超过配额",
+      "httpStatus": 409
+    },
+    "20008": {
+      "name": "EMBEDDING_CONFIGURATION_MISMATCH",
+      "enum": "NoteResultEnum",
+      "message": "向量模型配置不一致",
+      "httpStatus": 503
+    },
+    "30001": {
+      "name": "MODEL_UNAVAILABLE",
+      "enum": "ChatResultEnum",
+      "message": "模型服务不可用",
+      "httpStatus": 502
+    },
+    "30002": {
+      "name": "MODEL_TIMEOUT",
+      "enum": "ChatResultEnum",
+      "message": "模型响应超时",
+      "httpStatus": 504
+    },
+    "30003": {
+      "name": "REQUEST_LIMIT_EXCEEDED",
+      "enum": "ChatResultEnum",
+      "message": "请求超过并发或模型限额",
+      "httpStatus": 429
+    },
+    "30004": {
+      "name": "SOURCE_CHANGED",
+      "enum": "ChatResultEnum",
+      "message": "回答期间笔记来源已变更",
+      "httpStatus": 409
+    },
+    "40001": {
+      "name": "USER_NOT_FOUND",
+      "enum": "UserResultEnum",
+      "message": "用户不存在",
+      "httpStatus": 404
+    },
+    "40002": {
+      "name": "ADMIN_DISABLE_NOT_ALLOWED",
+      "enum": "UserResultEnum",
+      "message": "不可禁用当前管理员或最后一个启用的管理员",
+      "httpStatus": 409
+    },
+    "90001": {
+      "name": "INVALID_PARAMETER",
+      "enum": "CommonResultEnum",
+      "message": "请求参数错误",
+      "httpStatus": 400
+    },
+    "90002": {
+      "name": "INTERNAL_ERROR",
+      "enum": "CommonResultEnum",
+      "message": "服务内部错误",
+      "httpStatus": 500
+    },
+    "90003": {
+      "name": "CSRF_VALIDATION_FAILED",
+      "enum": "CommonResultEnum",
+      "message": "CSRF校验失败",
+      "httpStatus": 403
+    }
+  },
+  "x-call-sequence": [
+    "GET /api/auth/csrf 保存 Cookie 和 token",
+    "POST /api/auth/login 携带 Cookie + X-XSRF-TOKEN，接收轮换 Cookie",
+    "GET /api/auth/csrf 更新 token",
+    "POST /api/notes/upload 携带 Cookie + token，收到 READY 后提问",
+    "POST /api/chat/ask 携带 Cookie + token，展示回答及可追溯来源",
+    "POST /api/auth/logout 携带 Cookie + token，清除客户端登录状态"
+  ],
+  "x-implementation-status": "IMPLEMENTED_PENDING_EXTERNAL_INTEGRATION"
+}
