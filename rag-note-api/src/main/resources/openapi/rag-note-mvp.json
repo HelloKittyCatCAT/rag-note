@@ -3,7 +3,7 @@
   "info": {
     "title": "RAG 笔记 MVP HTTP 接口契约",
     "version": "1.0.0",
-    "description": "MVP 业务接口已实现，运行前须配置 PostgreSQL/pgvector 和模型连接。MVP 为通用私人笔记 RAG，非股票专用。API 模块 Param/Vo 为 Java 共享数据契约，本文件定义 HTTP 行为。所有 JSON 请求拒绝未定义字段；所有写请求均要求 Session 绑定 CSRF。身份只从已验证登录主体取值。所有响应 application/json，code=0 成功，错误 data=null。错误使用真实 HTTP 状态，不用 200 包装失败。响应时间 UTC ISO-8601，私人数据 Cache-Control:no-store；X-Request-Id 由服务器生成。对受保护接口先检查认证，已登录后检查 CSRF/角色/业务；无有效 Session 返回 401，禁用账号 403；匿名登录/注册仅要求匿名 Session + CSRF。相同请求多项错误时按此先后顺序处理。实现包含运行时 Controller、数据库持久化与模型适配；数据库及真实模型联调未在本次执行。"
+    "description": "MVP 业务接口已实现，运行前须配置 PostgreSQL/pgvector 和模型连接。MVP 为通用私人笔记 RAG。API 模块 Param/Vo 为 Java 共享数据契约，本文件定义 HTTP 行为。所有 JSON 请求拒绝未定义字段；所有写请求均要求 Session 绑定 CSRF。身份只从已验证登录主体取值。所有响应 application/json，code=0 成功，错误 data=null。错误使用真实 HTTP 状态，不用 200 包装失败。响应时间 UTC ISO-8601，私人数据 Cache-Control:no-store；X-Request-Id 由服务器生成。对受保护接口先检查认证，已登录后检查 CSRF/角色/业务；无有效 Session 返回 401，禁用账号 403；匿名登录/注册仅要求匿名 Session + CSRF。相同请求多项错误时按此先后顺序处理。实现包含运行时 Controller、数据库持久化与模型适配；数据库及真实模型联调未在本次执行。"
   },
   "servers": [
     {

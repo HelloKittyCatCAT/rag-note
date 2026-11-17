@@ -3,6 +3,7 @@ package com.sya.ragnote.service.impl.chat;
 import com.sya.ragnote.config.RagProperties;
 import com.sya.ragnote.converter.chat.ChatConverter;
 import com.sya.ragnote.dto.chat.ExecutionContext;
+import com.sya.ragnote.dto.chat.ChatMemory;
 import com.sya.ragnote.dto.chat.ValidatedAnswer;
 import com.sya.ragnote.enums.result.*;
 import com.sya.ragnote.exception.ServiceSystemException;
@@ -63,6 +64,11 @@ public class ChatServiceImpl implements ChatService {
 
     @Override
     public AskQuestionVo ask(long ownerId, AskQuestionParam param) {
+        return ask(ownerId, param, ChatMemory.EMPTY);
+    }
+
+    @Override
+    public AskQuestionVo ask(long ownerId, AskQuestionParam param, ChatMemory memory) {
         if (param == null
                 || param.getQuestion() == null
                 || param.getQuestion().isBlank()
@@ -85,7 +91,8 @@ public class ChatServiceImpl implements ChatService {
         var context =
                 new ExecutionContext(
                         ownerId, responses.requestId(), Instant.now().plusSeconds(timeout));
-        var task = new FutureTask<ValidatedAnswer>(() -> graph.run(context, question, ids));
+        var task = new FutureTask<ValidatedAnswer>(() -> memory.equals(ChatMemory.EMPTY) ? graph.run(context, question, ids)
+                        : graph.run(context, question, ids, memory));
         try {
             executor.execute(
                     () -> {

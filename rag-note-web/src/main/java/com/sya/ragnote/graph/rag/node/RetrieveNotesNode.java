@@ -26,7 +26,7 @@ public class RetrieveNotesNode {
                 search.search(
                         context.ownerId(),
                         new NoteSearchQuery(
-                                state.question(),
+                                retrievalQuestion(state),
                                 state.scope(),
                                 properties.getRetrieval().getTopK(),
                                 properties.getRetrieval().getMinScore()));
@@ -34,5 +34,16 @@ public class RetrieveNotesNode {
             search.validateEvidence(context.ownerId(), evidence);
         }
         return RagState.withEvidence(evidence);
+    }
+
+    private static String retrievalQuestion(RagState state) {
+        String question = state.question();
+        var history = state.history();
+        // 常见短追问补上上一轮的问题，保留当前请求的笔记范围。
+        if (!history.isEmpty() && question.length() <= 120
+                && question.matches("(?s).*(刚才|上[一轮次]|第.{1,5}点|那.{0,4}[个点条]|展开|继续|再说).*")) {
+            return history.get(history.size() - 1).question() + "\n" + question;
+        }
+        return question;
     }
 }

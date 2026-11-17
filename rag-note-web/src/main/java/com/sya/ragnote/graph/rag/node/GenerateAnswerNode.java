@@ -32,7 +32,29 @@ public class GenerateAnswerNode {
         if (tokens.count(prompt.system()) + tokens.count(user) > 6000) {
             throw new ServiceSystemException(CommonResultEnum.INVALID_PARAMETER);
         }
-        var answer = model.generate(prompt.system(), user);
+        String system = prompt.system();
+        var history = state.history();
+        var memory = state.memory();
+        if (!memory.equals(com.sya.ragnote.dto.chat.ChatMemory.EMPTY)) {
+            system += "\n历史问答与摘要仅帮助理解指代，画像仅用于调整表达，事实和引用以 current 中的本轮证据为准。";
+            String extra = prompt.user(state.question(), state.evidence(), java.util.List.of(),
+                    memory.recap(), memory.preference());
+            boolean useExtra = tokens.count(system) + tokens.count(extra) <= 6000;
+            if (useExtra) user = extra;
+            for (int start = history.size() - 1; start >= 0; start--) {
+                String candidate = prompt.user(state.question(), state.evidence(),
+                        history.subList(start, history.size()),
+                        useExtra ? memory.recap() : "", useExtra ? memory.preference() : "");
+                if (tokens.count(system) + tokens.count(candidate) > 6000) {
+                    break;
+                }
+                user = candidate;
+            }
+            if (tokens.count(system) + tokens.count(user) > 6000) {
+                system = prompt.system();
+            }
+        }
+        var answer = model.generate(system, user);
         context.verifyDeadline();
         return RagState.withRawAnswer(answer);
     }

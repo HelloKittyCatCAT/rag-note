@@ -58,6 +58,16 @@ public class RagGraph {
     }
 
     public ValidatedAnswer run(ExecutionContext context, String question, List<UUID> ids) {
+        return run(context, question, ids, ChatMemory.EMPTY);
+    }
+
+    public ValidatedAnswer run(ExecutionContext context, String question, List<UUID> ids,
+            List<PreviousTurn> history) {
+        return run(context, question, ids, new ChatMemory(history, "", ""));
+    }
+
+    public ValidatedAnswer run(ExecutionContext context, String question, List<UUID> ids,
+            ChatMemory memory) {
         try {
             // 每次请求独立建图，用户身份由不可变的 context 传给节点。
             var graph =
@@ -110,7 +120,7 @@ public class RagGraph {
             // 从问题和笔记范围开始执行，最终结果由最后完成的节点写入状态。
             var state =
                     graph.invoke(
-                                    GraphInput.args(RagState.initial(question, ids)),
+                                    GraphInput.args(RagState.initial(question, ids, memory)),
                                     RunnableConfig.builder().disableCloneState().build())
                             .orElseThrow();
             context.verifyDeadline();

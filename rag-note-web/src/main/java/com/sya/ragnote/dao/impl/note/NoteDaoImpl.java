@@ -2,6 +2,9 @@ package com.sya.ragnote.dao.impl.note;
 
 import com.sya.ragnote.dao.note.NoteDao;
 import com.sya.ragnote.entity.note.Note;
+import com.sya.ragnote.entity.note.NoteHeading;
+import com.sya.ragnote.enums.result.AuthResultEnum;
+import com.sya.ragnote.exception.ServiceSystemException;
 import com.sya.ragnote.mapper.note.NoteMapper;
 
 import org.springframework.stereotype.Repository;
@@ -55,6 +58,12 @@ public class NoteDaoImpl implements NoteDao {
                     com.sya.ragnote.enums.result.AuthResultEnum.NOT_AUTHENTICATED);
         }
         return mapper.listOwned(ownerId, offset, limit);
+    }
+
+    @Override
+    public List<NoteHeading> listHeadings(long ownerId, List<UUID> ids) {
+        if (ownerId <= 0) throw new ServiceSystemException(AuthResultEnum.NOT_AUTHENTICATED);
+        return ids.isEmpty() ? List.of() : mapper.listHeadings(ownerId, ids);
     }
 
     public void insert(Note note) {

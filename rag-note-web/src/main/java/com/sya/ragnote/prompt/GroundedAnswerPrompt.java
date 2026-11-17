@@ -1,6 +1,7 @@
 package com.sya.ragnote.prompt;
 
 import com.sya.ragnote.dto.note.NoteEvidence;
+import com.sya.ragnote.dto.chat.PreviousTurn;
 
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
@@ -34,6 +35,16 @@ public class GroundedAnswerPrompt {
         }
         return mapper.writeValueAsString(new PromptInput(question, List.copyOf(sources)));
     }
+
+    public String user(String question, List<NoteEvidence> evidence, List<PreviousTurn> history, String recap, String preference) {
+        if (history.isEmpty() && recap.isEmpty() && preference.isEmpty()) {
+            return user(question, evidence);
+        }
+        return mapper.writeValueAsString(new ConversationPrompt(
+                history, recap, preference, mapper.readTree(user(question, evidence))));
+    }
+
+    private record ConversationPrompt(List<PreviousTurn> history, String recap, String preference, tools.jackson.databind.JsonNode current) {}
 
     private record PromptSource(String sourceId, String title, String content) {}
 

@@ -1,6 +1,8 @@
 package com.sya.ragnote.graph.rag;
 
 import com.sya.ragnote.dto.chat.ValidatedAnswer;
+import com.sya.ragnote.dto.chat.PreviousTurn;
+import com.sya.ragnote.dto.chat.ChatMemory;
 import com.sya.ragnote.dto.note.*;
 
 import org.bsc.langgraph4j.state.AgentState;
@@ -15,6 +17,14 @@ public final class RagState extends AgentState {
 
     public String question() {
         return this.<String>value("question").orElseThrow();
+    }
+
+    public List<PreviousTurn> history() {
+        return memory().history();
+    }
+
+    public ChatMemory memory() {
+        return this.<ChatMemory>value("memory").orElse(ChatMemory.EMPTY);
     }
 
     public List<UUID> noteIds() {
@@ -42,7 +52,15 @@ public final class RagState extends AgentState {
     }
 
     public static Map<String, Object> initial(String question, List<UUID> ids) {
+        return initial(question, ids, ChatMemory.EMPTY);
+    }
+
+    public static Map<String, Object> initial(String question, List<UUID> ids,
+            ChatMemory memory) {
         var data = new HashMap<String, Object>();
+        if (!memory.equals(ChatMemory.EMPTY)) {
+            data.put("memory", memory);
+        }
         data.put("question", question);
         if (ids != null) {
             data.put("noteIds", List.copyOf(ids));

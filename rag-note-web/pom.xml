@@ -13,6 +13,22 @@
     <name>rag-note-web</name>
 
     <dependencies>
+        <!-- Align with the Kotlin runtime used to build OkHttp 5.3.2. -->
+        <dependency>
+            <groupId>org.jetbrains.kotlin</groupId>
+            <artifactId>kotlin-stdlib</artifactId>
+            <version>2.2.21</version>
+        </dependency>
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp-jvm</artifactId>
+            <version>5.3.2</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+            <version>1.22.1</version>
+        </dependency>
         <dependency>
             <groupId>com.sya</groupId>
             <artifactId>rag-note-api</artifactId>

@@ -64,6 +64,26 @@ class RagGraphTest {
         verify(validation).validate(9, evidence, "output");
     }
 
+    @Test
+    void followUpUsesPreviousQuestionForRetrievalAndAnswerForContext() throws Exception {
+        var search = mock(NoteSearchService.class);
+        var model = mock(ChatModelClient.class);
+        var validation = mock(AnswerValidationService.class);
+        var evidence = List.of(new NoteEvidence(
+                UUID.randomUUID(), UUID.randomUUID(), "Redis", "", 1, 1, "空值缓存", .8));
+        when(search.validateScope(9, null)).thenReturn(new NoteScope(List.of(), true, false));
+        when(search.search(eq(9L), any())).thenReturn(evidence);
+        when(model.generate(anyString(), anyString())).thenReturn("output");
+        when(validation.validate(9, evidence, "output")).thenReturn(ValidatedAnswer.noEvidence());
+
+        graph(search, model, validation).run(context(9), "展开第二点", null,
+                List.of(new PreviousTurn("怎么防止缓存穿透", "第二点是空值缓存")));
+
+        verify(search).search(eq(9L), argThat(query -> query.query().contains("怎么防止缓存穿透")
+                && query.query().contains("展开第二点")));
+        verify(model).generate(anyString(), contains("第二点是空值缓存"));
+    }
+
     private RagGraph graph(
             NoteSearchService search, ChatModelClient model, AnswerValidationService validation)
             throws Exception {

@@ -48,6 +48,8 @@ management:
     health:
       show-details: never
 rag:
+  research:
+    enabled: ${RESEARCH_ENABLED:false}
   bootstrap:
     username: ${BOOTSTRAP_USERNAME:}
     password: ${BOOTSTRAP_PASSWORD:}
